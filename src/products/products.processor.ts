@@ -14,14 +14,19 @@ export class ProductsProcessor extends WorkerHost {
   }
 
   async process(job: Job<SyncStockDto>): Promise<void> {
-    this.logger.log(`[Worker] Khởi tạo đồng bộ mã: ${job.data.sku} (Product: ${job.data.product_id})`);
+    const displayId = job.data.product_id || job.data.id;
+    const displaySku = job.data.sku || job.data.default_code || 'N/A';
+    
+    this.logger.log(`[Worker] Bắt đầu xử lý đồng bộ (ID: ${displayId} | SKU: ${displaySku})`);
     
     try {
       // 1. Lưu DB nội bộ Gateway và cập nhật Redis (Chuẩn S1)
       const product = await this.productsService.syncStock(job.data);
       this.logger.log(`[Worker] Đồng bộ hoàn thành mã: ${product.sku}`);
     } catch (error) {
-      this.logger.error(`[Worker] Lỗi đồng bộ mã ${job.data.sku}`, (error as Error).stack);
+      const displayId = job.data.product_id || job.data.id || 'N/A';
+      const displaySku = job.data.sku || job.data.default_code || 'N/A';
+      this.logger.error(`[Worker] Lỗi đồng bộ (ID: ${displayId} | SKU: ${displaySku})`, (error as Error).stack);
       throw error; // Throw lại để BullMQ auto retry
     }
   }

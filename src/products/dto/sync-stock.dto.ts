@@ -33,4 +33,20 @@ export class SyncStockDto {
   @IsOptional()
   @IsString()
   unit?: string;
+
+  // ── Odoo Native Fields (Hỗ trợ bắn Webhook trực tiếp từ UI Odoo) ──
+  @IsOptional()
+  id?: number; 
+
+  @IsOptional()
+  default_code?: string; // Tương đương SKU
+
+  @IsOptional()
+  display_name?: string; // Tương đương Name
+
+  @IsOptional()
+  qty_available?: number; // Tương đương qty_on_hand
+
+  @IsOptional()
+  list_price?: number; // Tương đương price
 }

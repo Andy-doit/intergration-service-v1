@@ -41,11 +41,11 @@ export class Inventory {
   change_type: InventoryChangeType;
 
   /** Số lượng thay đổi (dương = tăng, âm = giảm) */
-  @Column({ type: 'int' })
+  @Column({ type: 'decimal', precision: 12, scale: 3, default: 0 })
   delta: number;
 
   /** Số lượng tồn kho sau khi thay đổi (snapshot tại thời điểm ghi) */
-  @Column({ type: 'int' })
+  @Column({ type: 'decimal', precision: 12, scale: 3, default: 0 })
   qty_after: number;
 
   /** ID đơn hàng liên quan (nếu có) */

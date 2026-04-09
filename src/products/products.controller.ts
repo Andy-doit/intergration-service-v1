@@ -27,14 +27,22 @@ export class ProductsController {
    */
   @Post('sync')
   @HttpCode(HttpStatus.ACCEPTED)
-  async syncStock(@Body() dto: SyncStockDto) {
-    await this.syncQueue.add('sync_job', dto, {
-      attempts: 3,
-      backoff: { type: 'exponential', delay: 2000 },
-      removeOnComplete: { count: 200 },
-      removeOnFail: { count: 500 },
-    });
-    return { message: 'Đã nhận yêu cầu đồng bộ Sản Phẩm & Kho', status: 'queued' };
+  async syncStock(@Body() body: SyncStockDto | SyncStockDto[]) {
+    const dataArray = Array.isArray(body) ? body : [body];
+
+    for (const dto of dataArray) {
+      await this.syncQueue.add('sync_job', dto, {
+        attempts: 3,
+        backoff: { type: 'exponential', delay: 2000 },
+        removeOnComplete: { count: 200 },
+        removeOnFail: { count: 500 },
+      });
+    }
+
+    return { 
+      message: `Đã nhận yêu cầu đồng bộ cho ${dataArray.length} sản phẩm`, 
+      status: 'queued' 
+    };
   }
 
   /**

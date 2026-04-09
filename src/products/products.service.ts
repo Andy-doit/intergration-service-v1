@@ -31,59 +31,68 @@ export class ProductsService {
    *  3. Append Inventory audit log.
    */
   async syncStock(dto: SyncStockDto): Promise<Product> {
-    // ── 1. Chuẩn bị dữ liệu Product (Upsert) ─────────────────────────────────
+    // ── MAPPING ODOO NATIVE (Tự động nhận diện dữ liệu từ UI Odoo) ──────────────
+    const productId = dto.product_id || (dto.id ? `odoo.product.product:${dto.id}` : null);
+    const sku = dto.sku || dto.default_code;
+    const name = dto.name || dto.display_name;
+    const qty = dto.qty_on_hand !== undefined ? dto.qty_on_hand : dto.qty_available;
+    const price = dto.price !== undefined ? dto.price : dto.list_price;
+
+    if (!productId) {
+      throw new Error('Dữ liệu đồng bộ thiếu thông tin định danh (product_id hoặc id)');
+    }
+
+    const cleanedDto = { ...dto, product_id: productId, sku, name, qty_on_hand: qty, price };
+
+    // 1. Tìm hoặc tạo mới Product Catalog
     let product = await this.productRepo.findOne({
-      where: { id: dto.product_id },
+      where: { id: cleanedDto.product_id },
     });
 
     if (!product) {
-      // Nếu là lần đầu sync, bắt buộc phải có đủ sku và name
-      if (!dto.sku || !dto.name) {
-        throw new Error(
-          `Sản phẩm chưa tồn tại trong hệ thống. Cần cung cấp đầy đủ 'sku' và 'name' ở lần đồng bộ đầu tiên (product_id: ${dto.product_id}).`,
-        );
-      }
+      this.logger.log(`🆕 Tạo sản phẩm mới trong Hub: ${cleanedDto.product_id}`);
       product = this.productRepo.create({
-        id: dto.product_id,
-        sku: dto.sku,
-        name: dto.name,
-        category: dto.category ?? null,
-        price: dto.price ?? 0,
-        unit: dto.unit ?? 'cái',
-        is_active: true,
+        id: cleanedDto.product_id,
+        sku: cleanedDto.sku || 'N/A',
+        name: cleanedDto.name || 'Sản phẩm mới (Odoo Sync)',
+        price: cleanedDto.price || 0,
+        unit: cleanedDto.unit || 'cái',
+        category: cleanedDto.category || 'Chưa phân loại',
       });
     } else {
-      // Nếu đã tồn tại, chắp vá những trường thông tin Odoo gửi sang
-      if (dto.sku) product.sku = dto.sku;
-      if (dto.name) product.name = dto.name;
-      if (dto.category) product.category = dto.category;
-      if (dto.price !== undefined) product.price = dto.price;
-      if (dto.unit) product.unit = dto.unit;
+      this.logger.log(`📝 Cập nhật sản phẩm: ${cleanedDto.product_id}`);
     }
+
+    // Luôn cập nhật thông tin nếu có truyền lên (Partial Update)
+    if (cleanedDto.sku) product.sku = cleanedDto.sku;
+    if (cleanedDto.name) product.name = cleanedDto.name;
+    if (cleanedDto.price !== undefined) product.price = cleanedDto.price;
+    if (cleanedDto.unit) product.unit = cleanedDto.unit;
+    if (cleanedDto.category) product.category = cleanedDto.category;
 
     product.last_synced_at = new Date();
     await this.productRepo.save(product);
 
-    // ── 2. Xử lý tồn kho (chỉ khi có biến qty_on_hand) ────────────────────────
-    if (dto.qty_on_hand !== undefined && dto.qty_on_hand !== null) {
-      const previousQty = await this.redisService.getStockQty(dto.product_id);
-      await this.redisService.setStockQty(dto.product_id, dto.qty_on_hand);
+    // 2. Nếu có qty_on_hand -> Cập nhật Redis và ghi Log (S1)
+    if (cleanedDto.qty_on_hand !== undefined && cleanedDto.qty_on_hand !== null) {
+      const previousQty = await this.redisService.getStockQty(cleanedDto.product_id);
+      await this.redisService.setStockQty(cleanedDto.product_id, cleanedDto.qty_on_hand);
 
       this.logger.log(
-        `[StockSync] product=${dto.product_id} | prev=${previousQty ?? 'N/A'} → now=${dto.qty_on_hand}`,
+        `[StockSync] product=${cleanedDto.product_id} | prev=${previousQty ?? 'N/A'} → now=${cleanedDto.qty_on_hand}`,
       );
 
       // Append Inventory audit log
       const delta =
-        previousQty !== null ? dto.qty_on_hand - previousQty : dto.qty_on_hand;
+        previousQty !== null ? cleanedDto.qty_on_hand - previousQty : cleanedDto.qty_on_hand;
 
       await this.inventoryRepo.save(
         this.inventoryRepo.create({
-          product_id: dto.product_id,
+          product_id: cleanedDto.product_id,
           product,
           change_type: InventoryChangeType.SYNC,
           delta,
-          qty_after: dto.qty_on_hand,
+          qty_after: cleanedDto.qty_on_hand,
           note: `Synced from Odoo at ${new Date().toISOString()}`,
         }),
       );
