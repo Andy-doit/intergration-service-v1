@@ -1,0 +1,71 @@
+version: '3.8'
+
+# ─── G8HOME Integration Service – Local Dev Stack ─────────────────────────────
+# Chỉ gồm các service Infrastructure cần thiết.
+# NestJS app chạy riêng bằng: npm run start:dev
+#
+# Khởi động:   docker compose -f docker-compose.dev.yml up -d
+# Tắt:         docker compose -f docker-compose.dev.yml down
+# Xóa dữ liệu: docker compose -f docker-compose.dev.yml down -v
+
+services:
+
+  # ── Redis ─────────────────────────────────────────────────────────────────────
+  # Dùng cho: BullMQ queue broker + Soft-Reserve + Idempotency
+  redis:
+    image: redis:7.2-alpine
+    container_name: g8home_redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"          # localhost:6379 → container:6379
+    command: >
+      redis-server
+      --save 60 1
+      --loglevel warning
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── PostgreSQL ────────────────────────────────────────────────────────────────
+  # Dùng cho: TypeORM (orders, products, inventory_logs tables)
+  postgres:
+    image: postgres:16-alpine
+    container_name: g8home_postgres
+    restart: unless-stopped
+    ports:
+      - "5433:5432"          # localhost:5433 → container:5432 (tránh conflict với Postgres local)
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: integration_service
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d integration_service"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── RedisInsight (GUI quản lý Redis – optional) ───────────────────────────────
+  # Truy cập: http://localhost:5540
+  redis-insight:
+    image: redislabs/redisinsight:latest
+    container_name: g8home_redis_insight
+    restart: unless-stopped
+    ports:
+      - "5540:5540"
+    depends_on:
+      redis:
+        condition: service_healthy
+    profiles:
+      - tools          # Chỉ chạy khi: docker compose --profile tools up -d
+
+volumes:
+  redis_data:
+    driver: local
+  pg_data:
+    driver: local
