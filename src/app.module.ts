@@ -60,9 +60,9 @@ import { AuthMiddleware } from './auth/auth.middleware';
       }),
     }),
 
-    // ── Bull Board (Queue monitoring UI tại /admin/queues) ───────────────────
+    // ── Bull Board (Queue monitoring UI) ────────────────────────────────────
     BullBoardModule.forRoot({
-      route: '/admin/queues',
+      route: '/admin/_internal_queues_monitor_',
       adapter: ExpressAdapter,
       boardOptions: {
         uiConfig: {
@@ -92,6 +92,6 @@ export class AppModule implements NestModule {
   configure(consumer: MiddlewareConsumer) {
     consumer
       .apply(AuthMiddleware)
-      .forRoutes('/admin/queues', '/admin/queues/*path');
+      .forRoutes('admin/dashboard', 'admin/_internal_queues_monitor_');
   }
 }

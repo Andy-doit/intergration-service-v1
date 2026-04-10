@@ -26,6 +26,7 @@ export class ProductsController {
    * Upsert catalog + ghi Redis + ghi audit log.
    */
   @Post('sync')
+  @Post('/webhook/odoo-sync') // Alias hỗ trợ cấu hình mặc định trên Odoo của user
   @HttpCode(HttpStatus.ACCEPTED)
   async syncStock(@Body() body: SyncStockDto | SyncStockDto[]) {
     const dataArray = Array.isArray(body) ? body : [body];

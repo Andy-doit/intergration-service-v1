@@ -179,7 +179,11 @@ export class EventsProcessor extends WorkerHost {
       if (state === 'done') return 'picking.done';
     } else if (name.includes('PACK')) {
       if (state === 'done') return 'pack.done';
-    } else if (name.includes('OUT') || name.includes('DEL')) {
+    } else if (
+      name.includes('OUT') ||
+      name.includes('DEL') ||
+      name.includes('POS')
+    ) {
       if (state === 'done') return 'delivery.shipped';
     }
 

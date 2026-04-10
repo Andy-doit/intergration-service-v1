@@ -54,5 +54,22 @@ export class SyncStockDto {
   qty_available?: number; // Tương đương qty_on_hand
 
   @IsOptional()
+  @IsNumber()
+  @Min(0)
   list_price?: number; // Tương đương price
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  base_unit_price?: number; // Tương đương price (thường dùng cho Product Variant Odoo)
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  lst_price?: number; // Tên kỹ thuật khác của Sales Price trên Odoo Variant
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  sales_price?: number; // Tên thân thiện đôi khi được dùng trong Server Action
 }

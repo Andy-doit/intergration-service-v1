@@ -38,7 +38,19 @@ export class ProductsService {
     const name = dto.name || dto.display_name;
     const qty =
       dto.qty_on_hand !== undefined ? dto.qty_on_hand : dto.qty_available;
-    const price = dto.price !== undefined ? dto.price : dto.list_price;
+    const price = (dto.price !== undefined && dto.price !== (false as any)) 
+      ? dto.price 
+      : (dto.list_price !== undefined && dto.list_price !== (false as any) 
+          ? dto.list_price 
+          : (dto.lst_price !== undefined && dto.lst_price !== (false as any)
+            ? dto.lst_price
+            : (dto.sales_price !== undefined && dto.sales_price !== (false as any)
+              ? dto.sales_price
+              : (dto.base_unit_price !== undefined && dto.base_unit_price !== (false as any) ? dto.base_unit_price : undefined))));
+    
+    this.logger.debug(
+      `[Mapping] product_id=${productId} | RawPrice: p=${dto.price}, lp=${dto.list_price}, lstp=${dto.lst_price}, sp=${dto.sales_price}, bp=${dto.base_unit_price} -> Resolved=${price ?? 'KEEP_OLD'}`,
+    );
 
     if (!productId) {
       throw new Error(

@@ -22,25 +22,79 @@ export class OdooSyncProcessor extends WorkerHost {
       `[Worker S2] Bắt đầu đồng bộ danh mục Odoo sang Vendure (Job ID: ${job.id})`,
     );
 
-    const odooUrl = process.env.ODOO_BASE_URL || 'http://localhost';
-    const odooToken = process.env.ODOO_WEBHOOK_SECRET || '';
+    const baseUrl = process.env.ODOO_BASE_URL || 'http://localhost:8069';
+    const db = process.env.ODOO_DB || 'Ten_DB_Odoo';
+    const username = process.env.ODOO_USERNAME || 'admin';
+    const password = process.env.ODOO_PASSWORD || 'admin';
 
     try {
-      this.logger.log(`Fetching Master Data from Odoo API...`);
-      // Giả lập API gọi Odoo lấy danh sách sản phẩm.
-      // Odoo thực tế có thể trả JSON: [{ id, sku, name, list_price, uom_id }]
-      const response = await firstValueFrom(
-        this.httpService.get(`${odooUrl}/api/products?token=${odooToken}`),
-      );
+      // 1. Authenticate (JSON-RPC common.login)
+      this.logger.log(`[Worker S2] Authenticating with Odoo DB: ${db}...`);
+      const authPayload = {
+        jsonrpc: '2.0',
+        method: 'call',
+        params: {
+          service: 'common',
+          method: 'login',
+          args: [db, username, password],
+        },
+        id: Date.now(),
+      };
 
-      const products = response.data?.products || [];
+      const authRes = await firstValueFrom(
+        this.httpService.post(`${baseUrl}/jsonrpc`, authPayload),
+      );
+      const uid = authRes.data?.result;
+
+      if (!uid) {
+        throw new Error('Đăng nhập Odoo thất bại (Sai Database, User hoặc Pass)');
+      }
+
+      this.logger.log(`[Worker S2] Auth thành công. UID: ${uid}. Fetching Products...`);
+
+      // 2. Search & Read Products (JSON-RPC object.execute_kw)
+      const listPayload = {
+        jsonrpc: '2.0',
+        method: 'call',
+        params: {
+          service: 'object',
+          method: 'execute_kw',
+          args: [
+            db,
+            uid,
+            password,
+            'product.product',
+            'search_read',
+            [[]], // Domain: Tất cả sản phẩm
+            {
+              fields: [
+                'id',
+                'name',
+                'default_code',
+                'list_price',
+                'lst_price',
+                'qty_available',
+                'uom_id',
+              ],
+              limit: 500, // Để an toàn, lấy tối đa 500 bản ghi
+            },
+          ],
+        },
+        id: Date.now() + 1,
+      };
+
+      const dataRes = await firstValueFrom(
+        this.httpService.post(`${baseUrl}/jsonrpc`, listPayload),
+      );
+      const products = dataRes.data?.result || [];
+
       if (products.length === 0) {
         this.logger.warn(`⚠️ Odoo trả về 0 sản phẩm. Kết thúc tiến trình S2.`);
         return;
       }
 
       this.logger.log(
-        `✅ Tìm thấy ${products.length} sản phẩm. Tiến hành bắn sang Vendure...`,
+        `✅ Tìm thấy ${products.length} sản phẩm. Đang cập nhật sang Vendure...`,
       );
 
       let successCount = 0;
@@ -48,36 +102,31 @@ export class OdooSyncProcessor extends WorkerHost {
 
       for (const prod of products) {
         try {
+          // Odoo list_price/lst_price có thể là 0 hoặc false
+          const finalPrice = prod.lst_price || prod.list_price || 0;
+          
           await this.vendureAdminService.upsertAdminProduct({
-            sku: prod.sku,
+            sku: prod.default_code || `odoo-${prod.id}`,
             name: prod.name,
-            price: Number(prod.price || 0),
-            qty:
-              prod.qty_available !== undefined
-                ? Number(prod.qty_available)
-                : prod.qty_on_hand !== undefined
-                  ? Number(prod.qty_on_hand)
-                  : undefined,
-            unit: prod.unit || 'cái',
+            price: Number(finalPrice),
+            qty: Number(prod.qty_available || 0),
+            unit: Array.isArray(prod.uom_id) ? prod.uom_id[1] : 'cái',
           });
           successCount++;
         } catch (e: any) {
-          this.logger.error(`❌ Lỗi đồng bộ SP ${prod.sku}: ${e.message}`);
+          this.logger.error(`❌ Lỗi đồng bộ SP [${prod.name}]: ${e.message}`);
           failCount++;
         }
       }
 
       this.logger.log(
-        `[Worker S2] Xong! Thành công: ${successCount}, Thất bại: ${failCount}.`,
+        `[Worker S2] Hoàn tất. Thành công: ${successCount}, Thất bại: ${failCount}.`,
       );
-
-      // Nếu thất bại quá 2 lần liên tiếp (Theo chuẩn S2)... hiện tại logic fail 1 sp không throw lỗi tổng.
-      // Nếu muốn throw để BullMQ retry lại cả mảng, ta quăng throw new Error().
     } catch (error: any) {
       this.logger.error(
-        `[Worker S2] Lỗi MẠNG khi cào API Odoo: ${error.message}`,
+        `[Worker S2] Lỗi hệ thống khi đồng bộ Odoo: ${error.message}`,
       );
-      throw error; // Quăng lỗi để BullMQ chạy Retry 3x
+      throw error; // Để BullMQ thực hiện Retry
     }
   }
 }
