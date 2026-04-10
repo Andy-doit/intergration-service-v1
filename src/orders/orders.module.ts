@@ -5,12 +5,14 @@ import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 
 import { Order } from './entities/order.entity';
+import { OrderLog } from './entities/order-log.entity';
 import { OrdersController } from './orders.controller';
 import { OrdersService, ODOO_CREATE_PICKING_QUEUE } from './orders.service';
+import { SlaService } from './sla.service';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Order]),
+    TypeOrmModule.forFeature([Order, OrderLog]),
     BullModule.registerQueue({
       name: ODOO_CREATE_PICKING_QUEUE,
     }),
@@ -20,7 +22,7 @@ import { OrdersService, ODOO_CREATE_PICKING_QUEUE } from './orders.service';
     }),
   ],
   controllers: [OrdersController],
-  providers: [OrdersService],
+  providers: [OrdersService, SlaService],
   exports: [OrdersService],
 })
 export class OrdersModule {}

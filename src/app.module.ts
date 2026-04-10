@@ -13,6 +13,7 @@ import { OrdersModule } from './orders/orders.module';
 import { EventsModule } from './events/events.module';
 import { ProductsModule } from './products/products.module';
 import { Order } from './orders/entities/order.entity';
+import { OrderLog } from './orders/entities/order-log.entity';
 import { Product } from './products/entities/product.entity';
 import { Inventory } from './products/entities/inventory.entity';
 import { AuthModule } from './auth/auth.module';
@@ -37,7 +38,7 @@ import { AuthMiddleware } from './auth/auth.middleware';
         username: config.get<string>('DB_USER', 'postgres'),
         password: config.get<string>('DB_PASSWORD', 'postgres'),
         database: config.get<string>('DB_NAME', 'integration_service'),
-        entities: [Order, Product, Inventory],
+        entities: [Order, OrderLog, Product, Inventory],
         synchronize: config.get<string>('NODE_ENV') !== 'production',
         logging: config.get<string>('NODE_ENV') === 'development',
       }),

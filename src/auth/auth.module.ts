@@ -11,6 +11,7 @@ import { OrdersModule } from '../orders/orders.module';
   imports: [
     TypeOrmModule.forFeature([Order, Product]),
     VendureModule,
+    ProductsModule,
   ],
   controllers: [AuthController],
 })

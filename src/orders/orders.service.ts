@@ -12,6 +12,7 @@ import { Repository } from 'typeorm';
 import { RedisService } from '../redis/redis.service';
 import { CreateOrderDto } from './dto/create-order.dto';
 import { Order, OrderStatus } from './entities/order.entity';
+import { OrderLog } from './entities/order-log.entity';
 
 /** Tên BullMQ queue chính giao tiếp với Odoo */
 export const ODOO_CREATE_PICKING_QUEUE = '🚀 Gửi Đơn qua Odoo (Create Picking)';
@@ -24,11 +25,36 @@ export class OrdersService {
     @InjectRepository(Order)
     private readonly orderRepo: Repository<Order>,
 
+    @InjectRepository(OrderLog)
+    private readonly orderLogRepo: Repository<OrderLog>,
+
     @InjectQueue(ODOO_CREATE_PICKING_QUEUE)
     private readonly odooQueue: Queue,
 
     private readonly redisService: RedisService,
   ) {}
+
+  /**
+   * Ghi log sự kiện cho đơn hàng (Audit Trail)
+   */
+  async addLog(
+    orderId: string,
+    eventType: string,
+    data: {
+      fromStatus?: OrderStatus | null;
+      toStatus?: OrderStatus | null;
+      payload?: any;
+    },
+  ): Promise<OrderLog> {
+    const log = this.orderLogRepo.create({
+      order_id: orderId,
+      event_type: eventType,
+      from_status: data.fromStatus ?? null,
+      to_status: data.toStatus ?? null,
+      payload: data.payload ?? null,
+    });
+    return this.orderLogRepo.save(log);
+  }
 
   // ─── Create Order (S4 – Lượt đi) ─────────────────────────────────────────────
 
@@ -101,6 +127,12 @@ export class OrdersService {
       `Order saved: id=${savedOrder.id}, status=CONFIRMED, vendure_order_id=${dto.vendure_order_id}`,
     );
 
+    // Audit Log: Created
+    await this.addLog(savedOrder.id, 'ORDER_CREATED', {
+      toStatus: OrderStatus.CONFIRMED,
+      payload: { vendure_order_id: dto.vendure_order_id },
+    });
+
     // ── 4. Đẩy job vào BullMQ ────────────────────────────────────────────────
     const jobPayload = {
       order_id: savedOrder.id,
@@ -155,8 +187,17 @@ export class OrdersService {
     }
 
     Object.assign(order, { status: newStatus, ...meta });
+    const oldStatus = order.status;
     const updated = await this.orderRepo.save(order);
-    this.logger.log(`Order ${orderId}: ${order.status} → ${newStatus}`);
+    this.logger.log(`Order ${orderId}: ${oldStatus} → ${newStatus}`);
+
+    // Audit Log: State Transition
+    await this.addLog(orderId, 'STATE_TRANSITION', {
+      fromStatus: oldStatus,
+      toStatus: newStatus,
+      payload: meta,
+    });
+
     return updated;
   }
 

@@ -43,9 +43,9 @@ export class RedisService implements OnModuleDestroy {
     const now = Date.now().toString();
 
     const multi = this.client.multi();
-    // Gán biến tồn kho tự động chết sau 60 giây (theo chuẩn S1)
-    multi.set(key, qty.toString(), 'EX', 60);
-    multi.set(tsKey, now, 'EX', 60);
+    // Gán biến tồn kho tự động chết sau 90 giây (theo sơ đồ v4)
+    multi.set(key, qty.toString(), 'EX', 90);
+    multi.set(tsKey, now, 'EX', 90);
     await multi.exec();
   }
 
@@ -71,7 +71,7 @@ export class RedisService implements OnModuleDestroy {
   /**
    * Trừ kho mềm (Soft-Reserve) khi đặt hàng.
    * Dùng DECRBY để giảm stock:qty:{product_id}.
-   * Lưu tracking key: reserve:{product_id}:{order_draft_id} = qty
+   * Lưu tracking key: reserve:{product_id}:{order_draft_id} = qty (TTL 10 phút)
    *
    * @returns số lượng kho còn lại sau khi trừ. Nếu < 0 => thiếu hàng.
    */
@@ -85,8 +85,8 @@ export class RedisService implements OnModuleDestroy {
 
     const pipeline = this.client.pipeline();
     pipeline.decrby(stockKey, qty);
-    // Lưu tracking để có thể release sau này
-    pipeline.set(reserveKey, qty);
+    // Lưu tracking để có thể release sau này (Hết hạn sau 10 phút theo sơ đồ v4)
+    pipeline.set(reserveKey, qty.toString(), 'EX', 600);
     const results = await pipeline.exec();
 
     // results[0][1] là giá trị sau DECRBY

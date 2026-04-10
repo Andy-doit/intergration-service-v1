@@ -55,6 +55,11 @@ export class EventsProcessor extends WorkerHost {
       `[Worker] Processing job: name=${job.name}, order_id=${order_id}`,
     );
 
+    // Audit Log: Incoming Odoo Webhook
+    await this.ordersService.addLog(order_id, 'ODOO_WEBHOOK', {
+      payload: job.data,
+    });
+
     switch (event_type) {
       // ── CONFIRMED → PICKING ─────────────────────────────────────────────────
       case 'picking.created':

@@ -12,7 +12,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Order } from '../orders/entities/order.entity';
 import { Product } from '../products/entities/product.entity';
-import { OdooSyncSchedule } from '../vendure/odoo-sync.schedule';
+import { OdooSyncSchedule } from '../products/odoo-sync.schedule';
 
 @Controller('admin')
 export class AuthController {
