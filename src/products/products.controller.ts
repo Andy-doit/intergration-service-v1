@@ -39,9 +39,9 @@ export class ProductsController {
       });
     }
 
-    return { 
-      message: `Đã nhận yêu cầu đồng bộ cho ${dataArray.length} sản phẩm`, 
-      status: 'queued' 
+    return {
+      message: `Đã nhận yêu cầu đồng bộ cho ${dataArray.length} sản phẩm`,
+      status: 'queued',
     };
   }
 

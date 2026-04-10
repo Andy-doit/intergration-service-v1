@@ -102,10 +102,7 @@ export class RedisService implements OnModuleDestroy {
    * Dùng INCRBY để hoàn lại stock:qty:{product_id}.
    * Xóa tracking key: reserve:{product_id}:{order_draft_id}.
    */
-  async releaseReserve(
-    productId: string,
-    orderDraftId: string,
-  ): Promise<void> {
+  async releaseReserve(productId: string, orderDraftId: string): Promise<void> {
     const reserveKey = `reserve:${productId}:${orderDraftId}`;
     const stockKey = `stock:qty:${productId}`;
 

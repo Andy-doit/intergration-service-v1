@@ -81,7 +81,7 @@ import { AuthMiddleware } from './auth/auth.middleware';
     // ── Feature Modules ──────────────────────────────────────────────────────
     RedisModule,
     AuthModule,
-    ProductsModule,   // Phải trước OrdersModule vì Orders dùng ProductsService
+    ProductsModule, // Phải trước OrdersModule vì Orders dùng ProductsService
     OrdersModule,
     EventsModule,
   ],

@@ -12,6 +12,8 @@ export enum OrderStatus {
   PICKING = 'PICKING',
   PICKED = 'PICKED',
   PACKED = 'PACKED',
+  SHIPPED = 'SHIPPED',
+  DELIVERED = 'DELIVERED',
   CANCELLED = 'CANCELLED',
 }
 

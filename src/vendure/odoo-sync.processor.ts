@@ -18,7 +18,9 @@ export class OdooSyncProcessor extends WorkerHost {
   }
 
   async process(job: Job): Promise<void> {
-    this.logger.log(`[Worker S2] Bắt đầu đồng bộ danh mục Odoo sang Vendure (Job ID: ${job.id})`);
+    this.logger.log(
+      `[Worker S2] Bắt đầu đồng bộ danh mục Odoo sang Vendure (Job ID: ${job.id})`,
+    );
 
     const odooUrl = process.env.ODOO_BASE_URL || 'http://localhost';
     const odooToken = process.env.ODOO_WEBHOOK_SECRET || '';
@@ -28,7 +30,7 @@ export class OdooSyncProcessor extends WorkerHost {
       // Giả lập API gọi Odoo lấy danh sách sản phẩm.
       // Odoo thực tế có thể trả JSON: [{ id, sku, name, list_price, uom_id }]
       const response = await firstValueFrom(
-        this.httpService.get(`${odooUrl}/api/products?token=${odooToken}`)
+        this.httpService.get(`${odooUrl}/api/products?token=${odooToken}`),
       );
 
       const products = response.data?.products || [];
@@ -37,7 +39,9 @@ export class OdooSyncProcessor extends WorkerHost {
         return;
       }
 
-      this.logger.log(`✅ Tìm thấy ${products.length} sản phẩm. Tiến hành bắn sang Vendure...`);
+      this.logger.log(
+        `✅ Tìm thấy ${products.length} sản phẩm. Tiến hành bắn sang Vendure...`,
+      );
 
       let successCount = 0;
       let failCount = 0;
@@ -48,6 +52,12 @@ export class OdooSyncProcessor extends WorkerHost {
             sku: prod.sku,
             name: prod.name,
             price: Number(prod.price || 0),
+            qty:
+              prod.qty_available !== undefined
+                ? Number(prod.qty_available)
+                : prod.qty_on_hand !== undefined
+                  ? Number(prod.qty_on_hand)
+                  : undefined,
             unit: prod.unit || 'cái',
           });
           successCount++;
@@ -57,12 +67,16 @@ export class OdooSyncProcessor extends WorkerHost {
         }
       }
 
-      this.logger.log(`[Worker S2] Xong! Thành công: ${successCount}, Thất bại: ${failCount}.`);
-      
+      this.logger.log(
+        `[Worker S2] Xong! Thành công: ${successCount}, Thất bại: ${failCount}.`,
+      );
+
       // Nếu thất bại quá 2 lần liên tiếp (Theo chuẩn S2)... hiện tại logic fail 1 sp không throw lỗi tổng.
       // Nếu muốn throw để BullMQ retry lại cả mảng, ta quăng throw new Error().
     } catch (error: any) {
-      this.logger.error(`[Worker S2] Lỗi MẠNG khi cào API Odoo: ${error.message}`);
+      this.logger.error(
+        `[Worker S2] Lỗi MẠNG khi cào API Odoo: ${error.message}`,
+      );
       throw error; // Quăng lỗi để BullMQ chạy Retry 3x
     }
   }

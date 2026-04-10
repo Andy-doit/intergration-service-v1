@@ -133,14 +133,18 @@ export class OrdersService {
     newStatus: OrderStatus,
     meta?: Partial<Order>,
   ): Promise<Order> {
-    const order = await this.orderRepo.findOneOrFail({ where: { id: orderId } });
+    const order = await this.orderRepo.findOneOrFail({
+      where: { id: orderId },
+    });
 
     const allowedTransitions: Record<OrderStatus, OrderStatus[]> = {
       [OrderStatus.DRAFT]: [OrderStatus.CONFIRMED, OrderStatus.CANCELLED],
       [OrderStatus.CONFIRMED]: [OrderStatus.PICKING, OrderStatus.CANCELLED],
       [OrderStatus.PICKING]: [OrderStatus.PICKED, OrderStatus.CANCELLED],
       [OrderStatus.PICKED]: [OrderStatus.PACKED, OrderStatus.CANCELLED],
-      [OrderStatus.PACKED]: [OrderStatus.CANCELLED],
+      [OrderStatus.PACKED]: [OrderStatus.SHIPPED, OrderStatus.CANCELLED],
+      [OrderStatus.SHIPPED]: [OrderStatus.DELIVERED, OrderStatus.CANCELLED],
+      [OrderStatus.DELIVERED]: [],
       [OrderStatus.CANCELLED]: [],
     };
 
@@ -157,13 +161,12 @@ export class OrdersService {
   }
 
   async findById(orderId: string): Promise<Order> {
-    return this.orderRepo.findOneOrFail({ where: { id: orderId } });
+    return this.orderRepo.findOneOrFail({
+      where: [{ id: orderId }, { vendure_order_id: orderId }],
+    });
   }
 
-  async cancelOrder(
-    orderId: string,
-    reason: string,
-  ): Promise<Order> {
+  async cancelOrder(orderId: string, reason: string): Promise<Order> {
     return this.transitionTo(orderId, OrderStatus.CANCELLED, {
       cancel_reason: reason,
     });

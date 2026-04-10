@@ -1,4 +1,10 @@
-import { IsNotEmpty, IsNumber, IsOptional, IsString, Min } from 'class-validator';
+import {
+  IsNotEmpty,
+  IsNumber,
+  IsOptional,
+  IsString,
+  Min,
+} from 'class-validator';
 
 /** DTO khi Odoo push stock sync lên service */
 export class SyncStockDto {
@@ -36,7 +42,7 @@ export class SyncStockDto {
 
   // ── Odoo Native Fields (Hỗ trợ bắn Webhook trực tiếp từ UI Odoo) ──
   @IsOptional()
-  id?: number; 
+  id?: number;
 
   @IsOptional()
   default_code?: string; // Tương đương SKU

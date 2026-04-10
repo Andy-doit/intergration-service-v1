@@ -4,21 +4,9 @@ import { Job } from 'bullmq';
 import { Order, OrderStatus } from '../orders/entities/order.entity';
 import { OrdersService } from '../orders/orders.service';
 import { RedisService } from '../redis/redis.service';
-import { OdooWebhookDto } from './dto/odoo-webhook.dto';
+import { OdooWebhookDto, OdooEventType } from './dto/odoo-webhook.dto';
 import { ODOO_EVENT_QUEUE } from './events.constants';
-
-
-
-// ─── Mock external APIs ───────────────────────────────────────────────────────
-
-/**
- * Mock: Gọi sang Vendure để cancel đơn hàng.
- */
-async function cancelVendureOrder(vendureOrderId: string): Promise<void> {
-  // TODO: Thay bằng HTTP call thực tế tới Vendure Admin API
-  // await this.httpService.post(`${VENDURE_API_URL}/orders/${vendureOrderId}/cancel`)
-  console.log(`[MOCK] cancelVendureOrder: vendureOrderId=${vendureOrderId}`);
-}
+import { VendureAdminService } from '../vendure/vendure-admin.service';
 
 /**
  * Mock: Void hoặc refund payment cho khách hàng.
@@ -33,7 +21,9 @@ async function voidPayment(orderId: string): Promise<void> {
  */
 async function sendZnsSms(customerId: string, message: string): Promise<void> {
   // TODO: Thay bằng HTTP call tới Zalo ZNS hoặc SMS provider
-  console.log(`[MOCK] sendZnsSms: customerId=${customerId} | message="${message}"`);
+  console.log(
+    `[MOCK] sendZnsSms: customerId=${customerId} | message="${message}"`,
+  );
 }
 
 /**
@@ -53,6 +43,7 @@ export class EventsProcessor extends WorkerHost {
   constructor(
     private readonly ordersService: OrdersService,
     private readonly redisService: RedisService,
+    private readonly vendureAdminService: VendureAdminService,
   ) {
     super();
   }
@@ -87,8 +78,57 @@ export class EventsProcessor extends WorkerHost {
           OrderStatus.PACKED,
         );
         this.logger.log(`[Worker] Order ${order_id}: PICKED → PACKED`);
+
+        // Đồng bộ sang Vendure: Shipped
+        await this.vendureAdminService.transitionOrderToState(
+          packedOrder.vendure_order_id,
+          'Shipped',
+        );
+
         // Kích hoạt downstream orchestration
         await triggerOrchestrator(packedOrder);
+        break;
+      }
+
+      // ── PACKED → SHIPPED ───────────────────────────────────────────────────
+      case 'delivery.shipped': {
+        const order = await this.ordersService.transitionTo(
+          order_id,
+          OrderStatus.SHIPPED,
+        );
+        this.logger.log(`[Worker] Order ${order_id}: PACKED → SHIPPED`);
+        await this.vendureAdminService.transitionOrderToState(
+          order.vendure_order_id,
+          'Shipped',
+        );
+        break;
+      }
+
+      // ── SHIPPED → DELIVERED ────────────────────────────────────────────────
+      case 'delivery.delivered': {
+        const order = await this.ordersService.transitionTo(
+          order_id,
+          OrderStatus.DELIVERED,
+        );
+        this.logger.log(`[Worker] Order ${order_id}: SHIPPED → DELIVERED`);
+        await this.vendureAdminService.transitionOrderToState(
+          order.vendure_order_id,
+          'Delivered',
+        );
+        break;
+      }
+
+      // ── ANY → CANCELLED ───────────────────────────────────────────────────
+      case 'picking.cancelled': {
+        const order = await this.ordersService.cancelOrder(
+          order_id,
+          'Cancelled by Odoo picking',
+        );
+        this.logger.log(`[Worker] Order ${order_id}: → CANCELLED (via Odoo)`);
+        await this.vendureAdminService.transitionOrderToState(
+          order.vendure_order_id,
+          'Cancelled',
+        );
         break;
       }
 
@@ -97,11 +137,53 @@ export class EventsProcessor extends WorkerHost {
         await this.handleCompensation(job.data);
         break;
 
+      // ── MAPPING DỮ LIỆU THÔ ────────────────────────────────────────────────
+      case 'odoo_raw_status': {
+        this.logger.debug(
+          `[Worker] Mapping local payload: ${JSON.stringify(job.data.payload)}`,
+        );
+        const mappedType = this.mapRawStatusToEventType(job.data.payload);
+        if (mappedType) {
+          this.logger.log(`[Worker] Mapped raw event to: ${mappedType}`);
+          // Ghi đè event_type và tái xử lý switch (hoặc gọi lại hàm process)
+          job.data.event_type = mappedType as OdooEventType;
+          return this.process(job);
+        }
+        this.logger.warn(
+          `[Worker] Could not map raw status: ${JSON.stringify(job.data.payload)}`,
+        );
+        break;
+      }
+
       default:
         this.logger.warn(
           `[Worker] Unknown event_type="${event_type}" for order_id=${order_id}. Skipped.`,
         );
     }
+  }
+
+  /**
+   * Giải mã trạng thái thô từ Odoo dựa trên Display Name và State.
+   */
+  private mapRawStatusToEventType(payload: any): string | null {
+    const state = payload?.state;
+    const name = (payload?.display_name || '').toUpperCase();
+
+    if (state === 'cancel') return 'picking.cancelled';
+
+    if (name.includes('CAN')) {
+      if (state === 'assigned') return 'picking.started';
+      if (state === 'done') return 'picking.started'; // Quay về picking.started sau khi cân xong
+    } else if (name.includes('PICK')) {
+      if (state === 'assigned') return 'picking.started';
+      if (state === 'done') return 'picking.done';
+    } else if (name.includes('PACK')) {
+      if (state === 'done') return 'pack.done';
+    } else if (name.includes('OUT') || name.includes('DEL')) {
+      if (state === 'done') return 'delivery.shipped';
+    }
+
+    return null;
   }
 
   // ─── Giai đoạn 5: Compensation Transaction (6 bước) ───────────────────────
@@ -135,8 +217,13 @@ export class EventsProcessor extends WorkerHost {
 
     // ── Bước 1: Cancel Vendure order ─────────────────────────────────────────
     try {
-      await cancelVendureOrder(order.vendure_order_id);
-      this.logger.log(`[Compensation][1/6] Vendure order cancelled: ${order.vendure_order_id}`);
+      await this.vendureAdminService.transitionOrderToState(
+        order.vendure_order_id,
+        'Cancelled',
+      );
+      this.logger.log(
+        `[Compensation][1/6] Vendure order cancelled: ${order.vendure_order_id}`,
+      );
     } catch (err) {
       this.logger.error(
         `[Compensation][1/6] FAILED to cancel Vendure order ${order.vendure_order_id}`,
@@ -148,7 +235,9 @@ export class EventsProcessor extends WorkerHost {
     // ── Bước 2: Void / refund payment ────────────────────────────────────────
     try {
       await voidPayment(order_id);
-      this.logger.log(`[Compensation][2/6] Payment voided/refunded for order: ${order_id}`);
+      this.logger.log(
+        `[Compensation][2/6] Payment voided/refunded for order: ${order_id}`,
+      );
     } catch (err) {
       this.logger.error(
         `[Compensation][2/6] FAILED to void payment for order ${order_id}`,
@@ -181,7 +270,10 @@ export class EventsProcessor extends WorkerHost {
     // ── Bước 4: DEL reserve tracking keys ────────────────────────────────────
     try {
       for (const item of order.items) {
-        await this.redisService.deleteReserveTracking(item.product_id, order_id);
+        await this.redisService.deleteReserveTracking(
+          item.product_id,
+          order_id,
+        );
       }
       this.logger.log(
         `[Compensation][4/6] Reserve tracking keys deleted for order: ${order_id}`,
@@ -210,8 +302,7 @@ export class EventsProcessor extends WorkerHost {
 
     // ── Bước 6: Cancel order trong DB + ghi log incident ─────────────────────
     try {
-      const insufficientProduct =
-        (payload?.product_id as string) ?? 'unknown';
+      const insufficientProduct = (payload?.product_id as string) ?? 'unknown';
       const cancelReason = `stock.insufficient: product=${insufficientProduct}`;
 
       await this.ordersService.cancelOrder(order_id, cancelReason);

@@ -28,6 +28,6 @@ import { PRODUCT_SYNC_QUEUE } from './products.constants';
   ],
   controllers: [ProductsController],
   providers: [ProductsService, ProductsProcessor],
-  exports: [ProductsService],   // Export để OrdersService và EventsProcessor có thể gọi logReserve/logRelease
+  exports: [ProductsService], // Export để OrdersService và EventsProcessor có thể gọi logReserve/logRelease
 })
 export class ProductsModule {}

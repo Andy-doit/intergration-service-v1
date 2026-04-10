@@ -11,8 +11,8 @@ async function bootstrap() {
   // ── Global Validation Pipe ───────────────────────────────────────────────
   app.useGlobalPipes(
     new ValidationPipe({
-      whitelist: true,        // Strip unknown properties
-      transform: true,        // Auto-transform types (e.g. string → number)
+      whitelist: true, // Strip unknown properties
+      transform: true, // Auto-transform types (e.g. string → number)
       transformOptions: { enableImplicitConversion: true },
     }),
   );
@@ -29,8 +29,12 @@ async function bootstrap() {
   const port = process.env.PORT ?? 4000;
   await app.listen(port);
 
-  logger.log(`🚀 Order Gateway Service is running at: http://localhost:${port}`);
-  logger.log(`📊 Bull Board UI available at: http://localhost:${port}/admin/queues`);
+  logger.log(
+    `🚀 Order Gateway Service is running at: http://localhost:${port}`,
+  );
+  logger.log(
+    `📊 Bull Board UI available at: http://localhost:${port}/admin/queues`,
+  );
 }
 
 bootstrap();

@@ -10,7 +10,8 @@ export class VendureAdminController {
   async manualSyncMaster() {
     await this.odooSyncSchedule.triggerManualSync();
     return {
-      message: 'Đã đẩy lệnh đồng bộ danh mục từ Odoo sang Vendure (S2) vào hàng đợi. Vui lòng kiểm tra Bull Board.',
+      message:
+        'Đã đẩy lệnh đồng bộ danh mục từ Odoo sang Vendure (S2) vào hàng đợi. Vui lòng kiểm tra Bull Board.',
     };
   }
 }

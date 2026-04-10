@@ -1,4 +1,11 @@
-import { IsIn, IsNotEmpty, IsNumber, IsObject, IsOptional, IsString } from 'class-validator';
+import {
+  IsIn,
+  IsNotEmpty,
+  IsNumber,
+  IsObject,
+  IsOptional,
+  IsString,
+} from 'class-validator';
 
 /**
  * Danh sách event type hợp lệ từ Odoo webhook.
@@ -8,7 +15,11 @@ export const ODOO_EVENT_TYPES = [
   'picking.started',
   'picking.done',
   'pack.done',
+  'delivery.shipped',
+  'delivery.delivered',
+  'picking.cancelled',
   'stock.insufficient',
+  'odoo_raw_status',
 ] as const;
 
 export type OdooEventType = (typeof ODOO_EVENT_TYPES)[number];

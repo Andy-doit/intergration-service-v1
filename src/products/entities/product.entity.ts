@@ -8,7 +8,6 @@ import {
 } from 'typeorm';
 import { Inventory } from './inventory.entity';
 
-
 @Entity({ name: 'products' })
 export class Product {
   /** product_id từ Odoo (e.g. "odoo:product.product:42") */

@@ -4,6 +4,7 @@ import { BullModule } from '@nestjs/bullmq';
 import { Module } from '@nestjs/common';
 
 import { OrdersModule } from '../orders/orders.module';
+import { VendureModule } from '../vendure/vendure.module';
 import { ODOO_EVENT_QUEUE } from './events.constants';
 import { EventsController } from './events.controller';
 import { EventsProcessor } from './events.processor';
@@ -19,6 +20,7 @@ import { EventsProcessor } from './events.processor';
     }),
     // Import OrdersModule để EventsProcessor có OrdersService
     OrdersModule,
+    VendureModule,
   ],
   controllers: [EventsController],
   providers: [EventsProcessor],
